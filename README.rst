@@ -20,7 +20,7 @@ phototdt
 
 
 
-Python package to interact with photometry data coming from TDT and calculate dFF using methods developed by Martinova and colleagues.
+This Python package contains functions to get photometry data from a Tucker-Davis Technology (TDT) photomerty system and calculate dFF using methods developed by Martianova and colleagues. For more information on the analysis method, you can visit `Martianova, E., Aronson, S., Proulx, C.D. Multi-Fiber Photometry to Record Neural Activity in Freely Moving Animal.. J. Vis. Exp. (152), e60278, doi: 10.3791/60278 (2019). <https://www.jove.com/t/60278/multi-fiber-photometry-to-record-neural-activity-freely-moving>` . Implementation details and other language implementations (R, Matlab) are archived in `the publication's repository <https://github.com/katemartian/Photometry_data_processing>`
 
 
 * Free software: BSD license

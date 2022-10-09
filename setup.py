@@ -30,7 +30,7 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
     ],
-    description="Python package to interact with photometry data coming from TDT and calculate dFF using methods developed by Martinova and colleagues.",
+    description="This Python package contains functions to get photometry data from a Tucker-Davis Technology (TDT) photomerty system and calculate dFF using methods developed by Martianova and colleagues.",
     install_requires=requirements,
     license="BSD license",
     long_description=readme + '\n\n' + history,
