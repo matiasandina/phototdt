@@ -30,8 +30,11 @@ This Python package contains functions to get photometry data from a Tucker-Davi
 Features
 --------
 
-* Use phototdt.tdt_to_csv.tdt_to_csv() to convert block to a csv file and calculate zdFF on the 465 channel.
-* Use phototdt.get_cam_timestamps() to read camera timestamps from block. 
+This package reads TDT data from the directory of the block (e.g., ``photometry_dir``)
+
+* Use ``photo_data = phototdt.get_tdt_data(photometry_dir)`` to read and obtain a DataFrame with zdFF on the 465 channel.
+* Use ``phototdt.tdt_to_csv.tdt_to_csv(photometry_dir)`` to convert block to a csv file and calculate zdFF on the 465 channel.
+* Use ``phototdt.get_cam_timestamps(photometry_dir)`` to read camera timestamps from block. 
 
 Credits
 -------
