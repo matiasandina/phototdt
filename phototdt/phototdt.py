@@ -79,11 +79,11 @@ def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
   return data.epocs[cam_name].onset
 
 def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000):
+  photo_subset = photo_data.loc[n_remove:].copy()
   if smooth_win is None:
       # try to estimate the sampling rate and smooth one second
       # one second might be too much smoothing!
       smooth_win = int(1 / photo_subset["time_seconds"].diff().values[-1])
-  photo_subset = photo_data.loc[n_remove:].copy()
   # we might need to fix the issues here with size errors
   photo_subset["zdFF"] = get_zdFF(
     photo_subset._405, 
