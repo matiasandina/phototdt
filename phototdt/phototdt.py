@@ -87,7 +87,8 @@ def calculate_zdFF(photo_data, n_remove=5000):
     photo_subset._405, 
     photo_subset._465, 
     smooth_win=one_second, 
-    remove=1)
+    # do not remove, since we remove a large chunk at the start
+    remove=0)
   
   final_data =  pd.merge(photo_data, photo_subset["zdFF"], 
                          how="left", 
