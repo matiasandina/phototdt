@@ -78,15 +78,17 @@ def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
   data = tdt.read_block(folder)
   return data.epocs[cam_name].onset
 
-def calculate_zdFF(photo_data, n_remove=5000):
+def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000):
+  if smooth_win is None:
+      # try to estimate the sampling rate and smooth one second
+      # one second might be too much smoothing!
+      smooth_win = int(1 / photo_subset["time_seconds"].diff().values[-1])
   photo_subset = photo_data.loc[n_remove:].copy()
-  # try to estimate the sampling rate
-  one_second = int(1 / photo_subset["time_seconds"].diff().values[-1])
   # we might need to fix the issues here with size errors
   photo_subset["zdFF"] = get_zdFF(
     photo_subset._405, 
     photo_subset._465, 
-    smooth_win=one_second, 
+    smooth_win=smooth_win, 
     # do not remove, since we remove a large chunk at the start
     remove=0)
   
