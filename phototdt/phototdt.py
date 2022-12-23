@@ -6,6 +6,7 @@ import datetime
 import scipy.signal
 from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
+import warnings
 
 def get_tdt_data(folder, decimate=True, decimate_factor = 10, remove_start=False, verbose=False):
   '''
@@ -78,20 +79,49 @@ def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
   data = tdt.read_block(folder)
   return data.epocs[cam_name].onset
 
-def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000):
+def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000, z_window=None):
+  """
+  This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `photo_data`, removes the first `n_remove` rows, and returns a modified dataframe with the zdFF value added as a new column.
+  The zdFF value is calculated using the `get_zdFF_handler` function, which takes the _405 and _465 columns of the dataframe as input and calls the `get_zdFF` function from the `phototdt` module. If `smooth_win` is not provided, the function tries to estimate the sampling rate and smooths the data over a 1-second window. If `z_window` is not provided, the `get_zdFF_handler` function is called on the entire dataframe. Otherwise, the data is split into chunks based on the value of `z_window` and the `get_zdFF_handler` function is called on each chunk.
+  Parameters:
+  photo_data (pandas.DataFrame): The input dataframe.
+  smooth_win (int, optional): The smooth window to use when calculating the zdFF value. If not provided, the function will try to estimate the sampling rate and smooth over a 1-second window.
+  n_remove (int, optional): The number of rows to remove from the beginning of the dataframe. Default is 5000.
+  z_window (int, optional): If calculating the zdFF in chunks, z_window is the seconds used to chunk the data in chunks of z_window seconds (or less for the last chunk). `get_zdFF()` will be called for each chunk independently.
+  Returns:
+  pandas.DataFrame: The modified dataframe with the zdFF value added as a new column.
+  """
   photo_subset = photo_data.loc[n_remove:].copy()
   if smooth_win is None:
       # try to estimate the sampling rate and smooth one second
       # one second might be too much smoothing!
       smooth_win = int(1 / photo_subset["time_seconds"].diff().values[-1])
-  # we might need to fix the issues here with size errors
-  photo_subset["zdFF"] = get_zdFF(
-    photo_subset._405, 
-    photo_subset._465, 
-    smooth_win=smooth_win, 
-    # do not remove, since we remove a large chunk at the start
-    remove=0)
-  
+  if z_window is None:
+      photo_subset["zdFF"] = get_zdFF(
+        photo_subset._405, 
+        photo_subset._465, 
+        smooth_win=smooth_win, 
+        # There is an off by one error here if we do not remove
+        remove=1)
+  else:
+    # make the cuts in time
+    bins=np.arange(0, np.ceil(photo_subset.time_seconds.max()) + z_window, z_window)
+    photo_subset['win'] = pd.cut(x=photo_subset.time_seconds, 
+                          bins=bins,
+                          include_lowest=True)
+    # make them categorical
+    photo_subset['win_i'] = photo_subset.win.cat.codes
+    # find the break points
+    break_points = np.where(photo_subset.win_i != np.roll(photo_subset.win_i, 1))[0]
+    # delete first one so we don't get an empty dataframe
+    break_points = np.delete(break_points, 0)
+    # split into list and apply helper function that calls get_zdFF
+    df_list = np.array_split(photo_subset, break_points)
+    #print([x.shape for x in df_list])
+    df_list = list(map(lambda x: get_zdFF_handler(x, smooth_win=smooth_win), df_list))
+    # concat data to be ready to merge 
+    photo_subset = pd.concat(df_list)
+
   final_data =  pd.merge(photo_data, photo_subset["zdFF"], 
                          how="left", 
                          left_index=True, right_index=True)
@@ -112,6 +142,29 @@ Reference:
       https://www.jove.com/video/60278/multi-fiber-photometry-to-record-neural-activity-freely-moving
 
 '''
+
+def get_zdFF_handler(df, smooth_win=10):
+  """
+  This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `df` and returns a modified dataframe with the zdFF value added as a new column.
+  
+  The zdFF value is calculated using the `get_zdFF` function from the `phototdt` module, which takes the _405 and _465 columns of the dataframe as input. If the number of rows in the dataframe is less than the specified `smooth_win` (default is 10), a warning is issued and the `get_zdFF` function is called with a smooth_win value of 10. Otherwise, the `get_zdFF` function is called with a smooth_win value of 10.
+  
+  Parameters:
+  df (pandas.DataFrame): The input dataframe.
+  smooth_win (int, optional): The smooth window to use when calculating the zdFF value. Default is 10.
+  
+  Returns:
+  pandas.DataFrame: The modified dataframe with the zdFF value added as a new column.
+  """
+  # check shape
+  df_rows = df.shape[0]
+  # The last chunk will not be smoothed with the same window
+  if df_rows < smooth_win:
+      warnings.warn(f"Provided data has less rows ({df_rows}) than smoothing window ({smooth_win}), using default smooth_win=10")
+      df['zdFF'] = get_zdFF(df._405, df._465, smooth_win=10, remove=0)
+  else:
+      df['zdFF'] = get_zdFF(df._405, df._465, smooth_win=10, remove=0)
+  return(df)
 
 def get_zdFF(reference,signal,smooth_win=10,remove=200,lambd=5e4,porder=1,itermax=50): 
   '''
