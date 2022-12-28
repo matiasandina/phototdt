@@ -5,6 +5,29 @@ from datetime import datetime
 import warnings
 
 def rename_block(block_path):
+    """Rename the files in a folder using a BIDS-compliant naming convention.
+
+    This function renames the files in a given folder using a BIDS-compliant naming
+    convention based on the file names, and saves a log of the renaming operation to a
+    YAML file. The function also checks that the file names in the folder follow the
+    expected pattern, and that the file extensions are proper. If any of these checks
+    fail, the function raises an error.
+
+    Parameters
+    ----------
+    block_path : str
+        The path to the folder containing the files to be renamed.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If the file names in the folder do not follow the expected pattern, or if the
+        file extensions are not proper.
+    """
     # TODO: Use multiple helper functions to write the renaming as needed
 
     # Initialize an empty list to store the patterns and new names for the files
