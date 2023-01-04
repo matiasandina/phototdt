@@ -92,7 +92,7 @@ def  get_epoc_data(block, epoc_id):
   return get_epoc(block, epoc_id, "data")
 
 
-def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
+def get_cam_timestamps(block=None, folder=None, cam_name="Cam1", verbose=False):
   '''
   get_cam_timestamps is a function to retrieve timestamps from a camera 
   using the data streams as saved by TDT system.
@@ -100,10 +100,14 @@ def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
   cam_name: string with the camera name as saved configured in Synapse software
   returns the timestamp onset
   '''
-  if verbose:
-    print(f"Reading data from {folder}")
-  data = tdt.read_block(folder)
-  return data.epocs[cam_name].onset
+  assert block is not None or folder is not None, "Provide either block or folder to read the block from using tdt.read_block"
+  if block is None:
+    if verbose:
+      print(f"Reading data from {folder}")
+    data = tdt.read_block(folder)
+    return data.epocs[cam_name].onset
+  else:
+    return block.epocs[cam_name].onset
 
 def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000, z_window=None):
   """
