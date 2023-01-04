@@ -65,6 +65,32 @@ def get_tdt_data(folder, decimate=True, decimate_factor = 10, remove_start=False
   
   return df
 
+def list_epocs(block):
+  return block.epocs.keys()
+
+def get_epoc(block, epoc_id, when=None):
+  '''
+  This function handles the return of arrays from block.epocs, where `block=tdt.read_data(session_folder)`
+  It is likely better called with the handlers `get_epoc_onset()`, `get_epoc_offset()`, and `get_epoc_data()` 
+  '''
+  epocs = list_epocs(block)
+  assert when is not None, f"when must not be None"
+  if len(epoc_id) < 4:
+    # fill the 4 character spaces with "_" as TDT does by default
+    epoc_id = epoc_id.ljust(4, "_")
+  assert epoc_id in epocs, f"epoc_id `{epoc_id}` not in epocs {epocs}"
+  # TODO: asssert that the only possbile values for when are "onset", "offset", "Full", and something else TDT might have
+  return block.epocs.__getattribute__(epoc_id)[when]
+
+def get_epoc_onset(block, epoc_id):
+  return get_epoc(block, epoc_id, "onset")
+
+def get_epoc_offset(block, epoc_id):
+  return get_epoc(block, epoc_id, "offset")
+
+def  get_epoc_data(block, epoc_id):
+  return get_epoc(block, epoc_id, "data")
+
 
 def get_cam_timestamps(folder, cam_name="Cam1", verbose=False):
   '''

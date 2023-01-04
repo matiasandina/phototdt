@@ -14,8 +14,10 @@ To use phototdt in a project::
     # Convert photometry data from block to csv (interactive if folder is None)
     from phototdt.tdt_to_csv import tdt_to_csv 
     tdt_to_csv(session_folder)
+:::
 
 You can rename the block contents into BIDS format::
     from phototdt.rename_block import rename_block
     session_folder = "path/to/block/folder"
     rename_block(session_folder)
+:::
