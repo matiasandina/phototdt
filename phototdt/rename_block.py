@@ -34,6 +34,11 @@ def rename_block(block_path):
     patterns = []
     new_names = []
     files_in_dir = os.listdir(block_path)
+    previously_renamed = any([file.endswith("tdt_renaming.yaml") for file in files_in_dir])
+
+    if previously_renamed:
+        raise ValueError("This folder has been renamed before")
+
 
     # Iterate over the files in the folder
     for file in files_in_dir:
@@ -122,7 +127,7 @@ def bids_format(identifier, start_date, start_time=None, suffix=None):
         try:
             datetime.strptime(start_time, "%H%M%S")
         except ValueError:
-            raise ValueError("start_time is not in the correct format. Expecting HHMMSS, got {start_time}")
+            raise ValueError(f"start_time is not in the correct format. Expecting HHMMSS, got {start_time}")
         return f"sub-{identifier}_ses-{start_date}T{start_time}"
     else:
         return f"sub-{identifier}_ses-{start_date}T{start_time}_desc-{suffix}"
