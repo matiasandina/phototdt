@@ -109,33 +109,91 @@ def get_cam_timestamps(block=None, folder=None, cam_name="Cam1", verbose=False):
   else:
     return block.epocs[cam_name].onset
 
-def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000, z_window=None):
+from functools import wraps
+import inspect
+
+def print_kwargs(func):
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+      # Print the function name
+      verbose = kwargs.get('verbose', False)
+      if verbose:
+        print(f"Calling function {func.__name__}")
+        # Print the values of the passed keyword arguments
+        if kwargs:
+            print("Keyword arguments:")
+            for key, value in kwargs.items():
+                print(f"  {key} = {value}")
+      # Call the function
+      return func(*args, **kwargs)
+  return wrapper
+
+#def print_kwargs(func):
+#    @wraps(func)
+#    def wrapper(*args, **kwargs):
+#        verbose = kwargs.pop('verbose', False)
+#        # Call the function and return the result
+#        result = func(*args, **kwargs)
+#        # Print the function arguments if verbose is True
+#        if verbose:
+#            print(f"Calling function {func.__name__}")
+#            all_kwargs = kwargs.copy()
+#            if func.__kwdefaults__ is not None:
+#                all_kwargs.update(func.__kwdefaults__)
+#            if all_kwargs:
+#                print("Keyword arguments:")
+#                for key, value in all_kwargs.items():
+#                    print(f"  {key} = {value}")
+#        return result
+#    return wrapper
+
+
+@print_kwargs
+def calculate_zdFF(photo_data, **kwargs):
   """
   This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `photo_data`, removes the first `n_remove` rows, and returns a modified dataframe with the zdFF value added as a new column.
-  The zdFF value is calculated using the `get_zdFF_handler` function, which takes the _405 and _465 columns of the dataframe as input and calls the `get_zdFF` function from the `phototdt` module. If `smooth_win` is not provided, the function tries to estimate the sampling rate and smooths the data over a 1-second window. If `z_window` is not provided, the `get_zdFF_handler` function is called on the entire dataframe. Otherwise, the data is split into chunks based on the value of `z_window` and the `get_zdFF_handler` function is called on each chunk.
+  The zdFF value is calculated using the `get_zdFF_handler` function, which takes the _405 and _465 columns of the dataframe as input and calls the `get_zdFF` function from the `phototdt` module. If `smooth_win` is not provided, the function tries to estimate the sampling rate and smooths the data over a 1-second window. If `chunk_sec` is not provided, the `get_zdFF_handler` function is called on the entire dataframe. Otherwise, the data is split into chunks based on the value of `chunk_sec` and the `get_zdFF_handler` function is called on each chunk.
   Parameters:
   photo_data (pandas.DataFrame): The input dataframe.
-  smooth_win (int, optional): The smooth window to use when calculating the zdFF value. If not provided, the function will try to estimate the sampling rate and smooth over a 1-second window.
   n_remove (int, optional): The number of rows to remove from the beginning of the dataframe. Default is 5000.
-  z_window (int, optional): If calculating the zdFF in chunks, z_window is the seconds used to chunk the data in chunks of z_window seconds (or less for the last chunk). `get_zdFF()` will be called for each chunk independently.
+  chunk_sec (int, optional): If calculating the zdFF in chunks, chunk_sec is the seconds used to chunk the data in chunks of chunk_sec seconds (or less for the last chunk). `get_zdFF()` will be called for each chunk independently.
+  smooth_win (int, optional): The smooth window to use when calculating the zdFF value. If not provided, the function will try to estimate the sampling rate and smooth over a 1-second window.
+  Inputs for airPLS:
+  lambd: parameter that can be adjusted by user. The larger lambda is,  
+          the smoother the resulting background, z
+  porder: adaptive iteratively reweighted penalized least squares for baseline fitting
+  itermax: maximum iteration times
   Returns:
   pandas.DataFrame: The modified dataframe with the zdFF value added as a new column.
   """
+
+  # update default values of parameters that are moved to **kwargs
+  defaultKwargs = { 'n_remove': 5000, 
+                    'chunk_sec': None,
+                    'smooth_win': None,
+                    'remove' : 0,
+                    'lambd' : 5e4,
+                    'porder' : 1,
+                    'itermax' : 50,
+                    'verbose' : False}
+
+  kwargs = { **defaultKwargs, **kwargs }
+
+  n_remove = kwargs.get('n_remove')
+  chunk_sec = kwargs.get('chunk_sec')
+  smooth_win = kwargs.get('smooth_win')
+
   photo_subset = photo_data.loc[n_remove:].copy()
   if smooth_win is None:
       # try to estimate the sampling rate and smooth one second
       # one second might be too much smoothing!
       smooth_win = int(1 / photo_subset["time_seconds"].diff().values[-1])
-  if z_window is None:
-      photo_subset["zdFF"] = get_zdFF(
-        photo_subset._405, 
-        photo_subset._465, 
-        smooth_win=smooth_win, 
-        # There is an off by one error here if we do not remove
-        remove=1)
+      kwargs['smooth_win'] = smooth_win
+  if chunk_sec is None:
+      photo_subset["zdFF"] = get_zdFF(photo_subset._405, photo_subset._465, **kwargs)
   else:
     # make the cuts in time
-    bins=np.arange(0, np.ceil(photo_subset.time_seconds.max()) + z_window, z_window)
+    bins=np.arange(0, np.ceil(photo_subset.time_seconds.max()) + chunk_sec, chunk_sec)
     photo_subset['win'] = pd.cut(x=photo_subset.time_seconds, 
                           bins=bins,
                           include_lowest=True)
@@ -148,7 +206,7 @@ def calculate_zdFF(photo_data, smooth_win=None, n_remove=5000, z_window=None):
     # split into list and apply helper function that calls get_zdFF
     df_list = np.array_split(photo_subset, break_points)
     #print([x.shape for x in df_list])
-    df_list = list(map(lambda x: get_zdFF_handler(x, smooth_win=smooth_win), df_list))
+    df_list = list(map(lambda x: get_zdFF_handler(x, **kwargs), df_list))
     # concat data to be ready to merge 
     photo_subset = pd.concat(df_list)
 
@@ -172,8 +230,8 @@ Reference:
       https://www.jove.com/video/60278/multi-fiber-photometry-to-record-neural-activity-freely-moving
 
 '''
-
-def get_zdFF_handler(df, smooth_win=10):
+@print_kwargs
+def get_zdFF_handler(df, **kwargs):
   """
   This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `df` and returns a modified dataframe with the zdFF value added as a new column.
   
@@ -186,17 +244,32 @@ def get_zdFF_handler(df, smooth_win=10):
   Returns:
   pandas.DataFrame: The modified dataframe with the zdFF value added as a new column.
   """
+  # update default values of parameters that are moved to **kwargs
+  defaultKwargs = { 'n_remove': 5000, 
+                    'chunk_sec': None,
+                    'smooth_win': None,
+                    'remove' : 0,
+                    'lambd' : 5e4,
+                    'porder' : 1,
+                    'itermax' : 50}
+  kwargs = { **defaultKwargs, **kwargs }
+  smooth_win = kwargs.get('smooth_win')
+
+  # we should not be removing here 
+  kwargs['remove'] = 0
   # check shape
   df_rows = df.shape[0]
   # The last chunk will not be smoothed with the same window
   if df_rows < smooth_win:
       warnings.warn(f"Provided data has less rows ({df_rows}) than smoothing window ({smooth_win}), using default smooth_win=10")
-      df['zdFF'] = get_zdFF(df._405, df._465, smooth_win=10, remove=0)
+      kwargs['smooth_win'] = 10
+      df['zdFF'] = get_zdFF(df._405, df._465, **kwargs)
   else:
-      df['zdFF'] = get_zdFF(df._405, df._465, smooth_win=10, remove=0)
+      df['zdFF'] = get_zdFF(df._405, df._465, **kwargs)
   return(df)
 
-def get_zdFF(reference,signal,smooth_win=10,remove=200,lambd=5e4,porder=1,itermax=50): 
+@print_kwargs
+def get_zdFF(reference, signal, **kwargs): 
   '''
   Calculates z-score dF/F signal based on fiber photometry calcium-idependent 
   and calcium-dependent signals
@@ -218,6 +291,22 @@ def get_zdFF(reference,signal,smooth_win=10,remove=200,lambd=5e4,porder=1,iterma
   
   import numpy as np
   from sklearn.linear_model import Lasso
+
+  # update default values of parameters that are moved to **kwargs
+  defaultKwargs = { 'n_remove': 5000, 
+                    'chunk_sec': None,
+                    'smooth_win': None,
+                    'remove' : 0,
+                    'lambd' : 5e4,
+                    'porder' : 1,
+                    'itermax' : 50}
+  kwargs = { **defaultKwargs, **kwargs }
+
+  smooth_win = kwargs.get('smooth_win')
+  remove = kwargs.get('remove')
+  lambd = kwargs.get('lambd')
+  porder = kwargs.get('porder')
+  itermax = kwargs.get('itermax')
 
  # Smooth signal
   reference = smooth_signal(reference, smooth_win)
@@ -248,7 +337,7 @@ def get_zdFF(reference,signal,smooth_win=10,remove=200,lambd=5e4,porder=1,iterma
   return zdFF
 
 
-def smooth_signal(x,window_len=10,window='flat'):
+def smooth_signal(x,window_len=11,window='flat'):
 
     """smooth the data using a window with requested size.
     
@@ -271,7 +360,7 @@ def smooth_signal(x,window_len=10,window='flat'):
     import numpy as np
 
     if x.ndim != 1:
-        raise(ValueError, "smooth only accepts 1 dimension arrays.")
+        raise(ValueError, "smooth_signal only accepts 1 dimension arrays.")
 
     if x.size < window_len:
         raise(ValueError, "Input vector needs to be bigger than window size.")
@@ -291,7 +380,16 @@ def smooth_signal(x,window_len=10,window='flat'):
 
     y=np.convolve(w/w.sum(),s,mode='valid')
 
-    return y[(int(window_len/2)-1):-int(window_len/2)]
+    # Adjust for window being odd/even
+    if window_len % 2 == 0:
+      y = y[(window_len//2-1):-(window_len//2)]
+    else:
+      y = y[(window_len//2):-(window_len//2)]
+
+    if len(y) != len(x):
+        raise ValueError("Output vector does not have the same length as input vector.\nYou might want to change `smooth_win`")
+
+    return y
 
 
 '''
