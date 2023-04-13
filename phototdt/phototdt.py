@@ -112,6 +112,13 @@ def get_cam_timestamps(block=None, folder=None, cam_name="Cam1", verbose=False):
 from functools import wraps
 import inspect
 
+def get_total_duration(block=None, folder=None):
+  assert block is not None or folder is not None, "Provide either block or folder to read the block from using tdt.read_block"
+  if block is None:
+    return tdt.read_block(folder, t1=0, t2=0.1).info.duration.total_seconds()
+  else:
+    return block.info.duration.total_seconds()
+
 def print_kwargs(func):
   @wraps(func)
   def wrapper(*args, **kwargs):
