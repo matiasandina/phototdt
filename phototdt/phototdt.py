@@ -17,18 +17,35 @@ def get_tdt_data(block = None, folder=None, ref_stream="_405A", signal_streams=[
   assert block is not None or folder is not None, "Provide either block or folder to read the block from using tdt.read_block"
   assert len(signal_streams) < 3, f"Can only pass signal_streams as [green_channel_name red_channel_name], received {signal_streams}"
   # TODO check ref_stream and signal_streams are in place
+  
+  # Get the channel names to only need what's relevant
+  green_channel = signal_streams[0]
+  channel_names = [ref_stream, green_channel]
+  if len(signal_streams) > 1:
+    red_channel = signal_streams[1]
+    channel_names.append(red_channel)
+
   if block is None:
-    data = tdt.read_block(folder)    
+    # this is not error free
+    store_names = [channel.replace("_", "") for channel in channel_names]
+    # get the headers
+    headers = tdt.read_block(folder, headers=1)
+    all_names_present = all([name in headers.stores.keys() for name in channel_names])
+    assert all_names_present, f"Some provided channel names are not present in block"
+    # now read the relevant data
+    data = tdt.read_block(folder, store = store_names)    
   else:
+    assert isinstance(block, tdt.StructType), f"Block must be tdt.StructType, {type(block)} was provided"
     data = block
 
   if verbose:
     print(f"Reading data from {folder}")
  
   # Do some parsing of the entries
-  total_samples = len(data.streams[ref_stream].data)
-  fs = data.streams[ref_stream].fs
-  total_seconds = get_total_duration(data)
+  total_samples = len(data.streams.__getattribute__(ref_stream).data)
+  fs = data.streams.__getattribute__(ref_stream).fs
+  #total_seconds = get_total_duration(data) # this produces some rounding errors in the np.arange() call
+  total_seconds = total_samples/fs
   start_date = data.info.start_date
   end_date = data.info.stop_date
   sampling_interval = 1 / fs
@@ -37,14 +54,11 @@ def get_tdt_data(block = None, folder=None, ref_stream="_405A", signal_streams=[
 
   #####   Analyze data ######
   data_list = []
-  channel_names = [ref_stream, green_channel]
-  data_list[0] = data.streams[ref_stream].data
-  data_list[1] = data.streams[green_channel].data
+  data_list.append(data.streams.__getattribute__(ref_stream).data)
+  data_list.append(data.streams.__getattribute__(green_channel).data)
 
-  if len(signal_streams > 1):
-    red_channel = signal_streams[1]
-    data_list[1] = data.streams[red_channel].data
-    channel_names.append(red_channel)
+  if len(signal_streams) > 1:
+    data_list.append(data.streams.__getattribute__(red_channel).data)
 
   # decimate
   if decimate:
@@ -63,7 +77,7 @@ def get_tdt_data(block = None, folder=None, ref_stream="_405A", signal_streams=[
   for i in range(len(channel_names)):
       if data_list[i] is not None:
           data_dict[channel_names[i]] = data_list[i]
-
+  # put them into df
   df = pd.DataFrame(data_dict)
   
   if remove_start:
