@@ -8,51 +8,63 @@ from scipy.sparse import csc_matrix, eye, diags
 from scipy.sparse.linalg import spsolve
 import warnings
 
-def get_tdt_data(folder, decimate=True, decimate_factor = 10, remove_start=False, verbose=False):
+def get_tdt_data(block = None, folder=None, ref_stream="_405A", signal_streams=["_465A"], decimate=True, decimate_factor = 10, remove_start=False, verbose=False):
   '''
   get_tdt_data is a function to retrieve the data streams as saved by TDT system
   it uses tdt package and will retrieve the complete duration
   returns a data frame with UTC timestamp, time in seconds, and signal values for each channel
   '''
+  assert block is not None or folder is not None, "Provide either block or folder to read the block from using tdt.read_block"
+  assert len(signal_streams) < 3, f"Can only pass signal_streams as [green_channel_name red_channel_name], received {signal_streams}"
+  # TODO check ref_stream and signal_streams are in place
+  if block is None:
+    data = tdt.read_block(folder)    
+  else:
+    data = block
+
   if verbose:
     print(f"Reading data from {folder}")
-  data = tdt.read_block(folder)
-  total_samples = len(data.streams._405A.data)
-  fs = data.streams._405A.fs
-  # inverse sampling frequency in Hz
-  total_seconds = len(data.streams._405A.data)/fs
+ 
+  # Do some parsing of the entries
+  total_samples = len(data.streams[ref_stream].data)
+  fs = data.streams[ref_stream].fs
+  total_seconds = get_total_duration(data)
   start_date = data.info.start_date
   end_date = data.info.stop_date
   sampling_interval = 1 / fs
   
-  _405A_data = data.streams._405A.data
-  _465A_data = data.streams._465A.data
-  
+  green_channel = signal_streams[0]
+
+  #####   Analyze data ######
+  data_list = []
+  channel_names = [ref_stream, green_channel]
+  data_list[0] = data.streams[ref_stream].data
+  data_list[1] = data.streams[green_channel].data
+
+  if len(signal_streams > 1):
+    red_channel = signal_streams[1]
+    data_list[1] = data.streams[red_channel].data
+    channel_names.append(red_channel)
+
+  # decimate
   if decimate:
     sampling_interval = sampling_interval * decimate_factor
     total_samples = np.ceil(total_samples / decimate_factor)
-    # Decimate
-    _405A_data = scipy.signal.decimate(_405A_data, decimate_factor, ftype="fir")
-    _465A_data = scipy.signal.decimate(_465A_data, decimate_factor, ftype="fir")
-  # UTC datetime
-  # TODO: this doesn't create a real timestamp
-  # we should work with block['info']['start_date']
-  # we could re-construct a real timestamp by using the sampling frequency block['streams']['_465A'] 
-  # we can also argue that datetime is not relevant to keep if anyway has to be reconstructed...
-  datetime = pd.date_range(start_date, end_date, periods=total_samples)
-  # time_delta = datetime - start_date
-  # time_delta = time_delta / np.timedelta64(1, 's')
-  # using np works for a seconds range
-  time_np = np.arange(0, total_seconds, sampling_interval)
+    for i in range(len(data_list)):
+            data_list[i] = scipy.signal.decimate(data_list[i], decimate_factor, ftype="fir")
 
-  df = pd.DataFrame({
-    "utc_datetime" : datetime,
-    "time_seconds" : time_np,
-    "_405" : _405A_data,
-    "_465" : _465A_data
-  })
-  
-  # TODO: improve the check for third channel
+  # Create a DataFrame with the data for each channel
+  data_dict = {
+      # UTC datetime
+      "utc_datetime" : pd.date_range(start_date, end_date, periods=total_samples),
+      "time_seconds" : np.arange(0, total_seconds, sampling_interval)
+  }
+
+  for i in range(len(channel_names)):
+      if data_list[i] is not None:
+          data_dict[channel_names[i]] = data_list[i]
+
+  df = pd.DataFrame(data_dict)
   
   if remove_start:
     # this will have the times when each laser was turned on
