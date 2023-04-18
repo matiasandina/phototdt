@@ -182,7 +182,7 @@ def print_kwargs(func):
 
 
 @print_kwargs
-def calculate_zdFF(photo_data, **kwargs):
+def calculate_zdFF(photo_data, ref_col, sig_col, **kwargs):
   """
   This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `photo_data`, removes the first `n_remove` rows, and returns a modified dataframe with the zdFF value added as a new column.
   The zdFF value is calculated using the `get_zdFF_handler` function, which takes the _405 and _465 columns of the dataframe as input and calls the `get_zdFF` function from the `phototdt` module. If `smooth_win` is not provided, the function tries to estimate the sampling rate and smooths the data over a 1-second window. If `chunk_sec` is not provided, the `get_zdFF_handler` function is called on the entire dataframe. Otherwise, the data is split into chunks based on the value of `chunk_sec` and the `get_zdFF_handler` function is called on each chunk.
@@ -223,7 +223,7 @@ def calculate_zdFF(photo_data, **kwargs):
       smooth_win = int(1 / photo_subset["time_seconds"].diff().values[-1])
       kwargs['smooth_win'] = smooth_win
   if chunk_sec is None:
-      photo_subset["zdFF"] = get_zdFF(photo_subset._405, photo_subset._465, **kwargs)
+      photo_subset["zdFF"] = get_zdFF(photo_subset[ref_col], photo_subset[sig_col], **kwargs)
   else:
     # make the cuts in time
     bins=np.arange(0, np.ceil(photo_subset.time_seconds.max()) + chunk_sec, chunk_sec)
@@ -239,7 +239,7 @@ def calculate_zdFF(photo_data, **kwargs):
     # split into list and apply helper function that calls get_zdFF
     df_list = np.array_split(photo_subset, break_points)
     #print([x.shape for x in df_list])
-    df_list = list(map(lambda x: get_zdFF_handler(x, **kwargs), df_list))
+    df_list = list(map(lambda x: get_zdFF_handler(x, ref_col, sig_col, **kwargs), df_list))
     # concat data to be ready to merge 
     photo_subset = pd.concat(df_list)
 
@@ -264,7 +264,7 @@ Reference:
 
 '''
 @print_kwargs
-def get_zdFF_handler(df, **kwargs):
+def get_zdFF_handler(df, ref_col, sig_col, **kwargs):
   """
   This function calculates the zdFF (z-dimensional Fractional Fluorescence) value for a given dataframe `df` and returns a modified dataframe with the zdFF value added as a new column.
   
@@ -296,9 +296,9 @@ def get_zdFF_handler(df, **kwargs):
   if df_rows < smooth_win:
       warnings.warn(f"Provided data has less rows ({df_rows}) than smoothing window ({smooth_win}), using default smooth_win=10")
       kwargs['smooth_win'] = 10
-      df['zdFF'] = get_zdFF(df._405, df._465, **kwargs)
+      df['zdFF'] = get_zdFF(df[ref_col], df[sig_col], **kwargs)
   else:
-      df['zdFF'] = get_zdFF(df._405, df._465, **kwargs)
+      df['zdFF'] = get_zdFF(df[ref_col], df[sig_col], **kwargs)
   return(df)
 
 @print_kwargs
